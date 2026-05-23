@@ -1,22 +1,26 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Autonomous Task & Data Orchestration Dashboard API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: telemetry
+    description: Live engine telemetry
+  - name: tasks
+    description: Task dispatch and management
+  - name: agents
+    description: Multi-agent queue
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +28,128 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /telemetry/snapshot:
+    get:
+      operationId: getTelemetrySnapshot
+      tags: [telemetry]
+      summary: Get current system telemetry snapshot
+      responses:
+        "200":
+          description: Telemetry snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelemetrySnapshot"
+
+  /tasks:
+    get:
+      operationId: listTasks
+      tags: [tasks]
+      summary: List all dispatched tasks
+      responses:
+        "200":
+          description: Task list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+    post:
+      operationId: dispatchTask
+      tags: [tasks]
+      summary: Dispatch a new task to the agent queue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskInput"
+      responses:
+        "201":
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /tasks/{id}:
+    get:
+      operationId: getTask
+      tags: [tasks]
+      summary: Get a specific task by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Task detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "404":
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: cancelTask
+      tags: [tasks]
+      summary: Cancel a task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Task cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "404":
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /agents:
+    get:
+      operationId: listAgents
+      tags: [agents]
+      summary: List all agents and their current status
+      responses:
+        "200":
+          description: Agent list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Agent"
+
+  /stats/summary:
+    get:
+      operationId: getStatsSummary
+      tags: [telemetry]
+      summary: Get aggregated stats summary for dashboard overview
+      responses:
+        "200":
+          description: Stats summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsSummary"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +160,109 @@ components:
       required:
         - status
 
+    TelemetrySnapshot:
+      type: object
+      required: [cpuPercent, memoryPercent, memoryUsedMb, memoryTotalMb, uptimeSeconds, requestsPerSecond, activeConnections, timestamp]
+      properties:
+        cpuPercent:
+          type: number
+        memoryPercent:
+          type: number
+        memoryUsedMb:
+          type: number
+        memoryTotalMb:
+          type: number
+        uptimeSeconds:
+          type: number
+        requestsPerSecond:
+          type: number
+        activeConnections:
+          type: integer
+        timestamp:
+          type: string
+
+    Task:
+      type: object
+      required: [id, payload, status, agent, priority, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        payload:
+          type: string
+        status:
+          type: string
+          enum: [queued, processing, completed, failed, cancelled]
+        agent:
+          type: string
+          enum: [claude, deepseek, hermes]
+        priority:
+          type: string
+          enum: [low, medium, high, critical]
+        result:
+          type: ["string", "null"]
+        errorMessage:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    TaskInput:
+      type: object
+      required: [payload]
+      properties:
+        payload:
+          type: string
+          minLength: 1
+        agent:
+          type: string
+          enum: [claude, deepseek, hermes]
+        priority:
+          type: string
+          enum: [low, medium, high, critical]
+
+    Agent:
+      type: object
+      required: [id, name, status, tasksProcessed, avgLatencyMs, model]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [idle, processing, error, offline]
+        tasksProcessed:
+          type: integer
+        avgLatencyMs:
+          type: number
+        model:
+          type: string
+        currentTaskId:
+          type: ["string", "null"]
+
+    StatsSummary:
+      type: object
+      required: [totalTasks, completedTasks, failedTasks, queuedTasks, processingTasks, avgThroughput, topAgent]
+      properties:
+        totalTasks:
+          type: integer
+        completedTasks:
+          type: integer
+        failedTasks:
+          type: integer
+        queuedTasks:
+          type: integer
+        processingTasks:
+          type: integer
+        avgThroughput:
+          type: number
+        topAgent:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
